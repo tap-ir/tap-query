@@ -1,0 +1,26 @@
+[package]
+name = "tap-query"
+version = "0.1.0"
+authors = ["Solal Jacob"]
+edition = "2021"
+
+description = "Search engine for TAP"
+readme      = "README.md"
+
+[build-dependencies]
+lalrpop = "0.19.6"
+
+[dependencies]
+tap = { version="0.1.0", git="https://github.com/tap-ir/tap.git" }
+lalrpop-util = { version = "0.19.6", features = ["lexer"] }
+regex = "1.5.5"
+fuzzy-matcher = "*"
+wildmatch = "2.1.0"
+anyhow = { version = "1.0.40"}
+rayon = "1.5"
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_derive = "1.0"
+grep-searcher = "0.1.8"
+grep-regex = "0.1.9"
+grep-matcher = "0.1.5"

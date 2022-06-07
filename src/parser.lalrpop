@@ -1,0 +1,89 @@
+//! lalrpop grammars for query
+
+use tap::tree::{Tree, TreeNodeId};
+use crate::filter::Op;
+use crate::attribute::{QueryType, MatchMethod, match_query, match_attribute_query};
+use crate::data::{query_data, query_data_regex, DataMethod};
+
+use lalrpop_util::ParseError;
+
+grammar(tree : &Tree, nodes : &Vec<TreeNodeId>);
+
+//  Look for attribute.name || attribute.type() => Return attribute path
+//not (!), (&& and), (or), (xor)
+
+pub OpNodes : Vec<TreeNodeId> = 
+{
+  <l:OpNodes> "or" <r:Nodes> => Op::or(l, r),
+  <l:OpNodes> "and" <r:Nodes> => Op::and(l, r),
+  <l:OpNodes> "and not" <r:Nodes> => Op::and_not(l, r),
+  Nodes,
+}
+
+pub Nodes : Vec<TreeNodeId> =
+{
+  //name or attribute.name == " " => call match query with fixed string
+  <t:QueryTypeExpr> "==" <v:Quoted> =>? match_query(tree, nodes, t, MatchMethod::Fixed, v).map_err(|err| ParseError::UnrecognizedEOF{ location : 0, expected : vec![err.to_string()] }),
+
+  //name or attribute.name == u/w/r/f"" call match_query with query type
+  <t:QueryTypeExpr> "==" <m:MatchMethodExpr> <v:Quoted> =>? match_query(tree, nodes, t, m, v).map_err(|err| ParseError::UnrecognizedEOF{ location : 0, expected : vec![err.to_string()] }),
+
+  //attribute:u/attribute:w/attribute:r/attribute:f/" " == "" call match_attribute_query 
+  <am:AttributeQueryTypeExpr> <an:AttributeName> "==" <v:Quoted> =>? match_attribute_query(tree, nodes, an, am, v, MatchMethod::Fixed).map_err(|err| ParseError::UnrecognizedEOF{ location : 0, expected : vec![err.to_string()] }),
+
+  //attriubte:u/attribute:w/attribute:r/attribute:f/" " == u/w/r/f"" call match_attribute_query
+  <am:AttributeQueryTypeExpr> <an:AttributeName> "==" <vm:MatchMethodExpr> <v:Quoted> =>? match_attribute_query(tree, nodes,  an, am, v, vm).map_err(|err| ParseError::UnrecognizedEOF{ location : 0, expected : vec![err.to_string()] }),
+
+  //data is not in QueryTypeExpr as it only support regex 
+  //"data" "==" <v:Quoted> =>? query_data_regex(tree, nodes, v).map_err(|err| ParseError:: }),
+  "data" "==" <v:Quoted> =>? query_data_regex(tree, nodes, v).map_err(|err| ParseError::UnrecognizedEOF{ location : 0, expected : vec![err.to_string()] }),
+  "data" "==" <dm:DataMatchMethodExpr> <v:Quoted> =>? query_data(tree, nodes, v, dm).map_err(|err| ParseError::UnrecognizedEOF{ location : 0, expected : vec![err.to_string()] }),
+
+
+  //("") => n
+  "(" <n:Nodes> ")" => n,
+};
+
+// self.session.query("attribute.name == 'exif.primary.model'")
+// or (attribute:'' == w'image2*')")
+
+DataMatchMethodExpr : DataMethod = 
+{
+  "r" => DataMethod::Regex,
+  "t" => DataMethod::Text,
+};
+
+AttributeQueryTypeExpr : MatchMethod = 
+{
+  "attribute:" => MatchMethod::Fixed,
+  "attribute:u" => MatchMethod::Fixed,
+  "attribute:w" => MatchMethod::Wildcard,
+  "attribute:r" => MatchMethod::Regex,
+  "attribute:f" => MatchMethod::Fuzzy,
+};
+
+QueryTypeExpr : QueryType =
+{
+  "attribute.name" => QueryType::AttributeName, //match attribute.name
+  "name" => QueryType::Name, //match node name (name == 'image1.jpg')
+};
+
+MatchMethodExpr : MatchMethod =
+{
+  "u" => MatchMethod::Fixed,
+  "w" => MatchMethod::Wildcard,
+  "r" => MatchMethod::Regex,
+  "f" => MatchMethod::Fuzzy,
+};
+
+//match anything between quote
+Quoted : &'input str = 
+{
+  r"'[^']+'" => &<>[1..<>.len()-1],
+};
+
+//match anything between quote
+AttributeName : &'input str = 
+{
+  r"'[^']+'" => &<>[1..<>.len()-1],
+};
